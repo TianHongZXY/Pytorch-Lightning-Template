@@ -40,10 +40,12 @@ class Pooler(pl.LightningModule):
 
     def forward(self, attention_mask, outputs):
         #  use this if pretrained_model.forward(return_dict=True)
-        #  last_hidden = outputs.last_hidden_state
-        #  hidden_states = outputs.hidden_states
-        last_hidden = outputs[0]
-        hidden_states = outputs[2]
+        last_hidden = outputs.last_hidden_state
+        hidden_states = outputs.hidden_states
+
+        #  use this if pretrained_model.forward(return_dict=False)
+        #  last_hidden = outputs[0]
+        #  hidden_states = outputs[2]
 
         if self.pooler_type in ['cls_before_pooler', 'cls']:
             return last_hidden[:, 0]
@@ -105,6 +107,7 @@ class BaseModel(pl.LightningModule):
         parser = parent_args.add_argument_group('BaseModel')
         
         # * Args for general setting
+        parser.add_argument('--num_threads', default=8, type=int)
         parser.add_argument('--eval', action='store_true', default=False)
         parser.add_argument('--checkpoint_path', default=None, type=str)
         parser.add_argument('--seed', default=20020206, type=int)
@@ -146,8 +149,9 @@ class BaseModel(pl.LightningModule):
     def setup(self, stage) -> None:
         if stage == 'fit':
             train_loader = self.train_dataloader()
+            num_gpus = self.trainer.gpus if self.trainer.gpus is not None else 0
             self.total_step = int(self.trainer.max_epochs * len(train_loader) / \
-                (max(1, self.trainer.gpus) * self.trainer.accumulate_grad_batches))
+                (max(1, num_gpus) * self.trainer.accumulate_grad_batches))
             print('Total training step:', self.total_step)
 
     def train_inputs(self, batch):
@@ -193,13 +197,13 @@ class BaseModel(pl.LightningModule):
             loss = self.loss_fn(logits, labels.view(-1))
 
         ntotal = logits.size(0)
-        ncorrect = (logits.argmax(dim=-1) == batch['labels']).long().sum()
+        ncorrect = int((logits.argmax(dim=-1) == batch['labels']).long().sum())
         acc = ncorrect / ntotal
 
         self.log('valid_loss', loss, on_step=True, prog_bar=True)
         self.log("valid_acc", acc, on_step=True, prog_bar=True)
 
-        return ncorrect.detach().cpu(), ntotal, predict, labels.cpu().tolist()
+        return ncorrect, ntotal, predict, labels.cpu().tolist()
 
     def validation_epoch_end(self, validation_step_outputs):
         ncorrect = 0

@@ -17,7 +17,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 from transformers import AutoConfig, AutoModel, AdamW
 from transformers.optimization import get_linear_schedule_with_warmup
-from base_model import BaseModel, MLPLayer, OutputLayer, Pooler
+from models.base_model import BaseModel, MLPLayer, OutputLayer, Pooler
 from torchsnooper import snoop
 from ChildTuningOptimizer import ChildTuningAdamW
 from fairscale.nn import checkpoint_wrapper, auto_wrap, wrap
@@ -57,23 +57,19 @@ class Bert(BaseModel):
                     param.requires_grad = False
         self.init_model(args)
 
-    def adv_forward(self, logits, input_ids, attention_mask, token_type_ids):
+    def adv_forward(self, logits, train_inputs):
         adv_loss = self.adv_loss_fn(model=self,
                                     logits=logits,
-                                    train_inputs
+                                    train_inputs=train_inputs
                                     )
 
         adv_loss = self.hparams.adv_alpha * adv_loss
 
         return adv_loss
 
-    def forward(self, attention_mask, token_type_ids, softmax_mask=None, input_ids=None, inputs_embeds=None):
-        if inputs_embeds is not None:
-            outputs = self.bert(attention_mask=attention_mask, token_type_ids=token_type_ids, 
-                                inputs_embeds=inputs_embeds, output_hidden_states=True, return_dict=False)
-        else:
-            outputs = self.bert(input_ids, attention_mask, token_type_ids, 
-                                output_hidden_states=True, return_dict=False)
+    def forward(self, input_ids=None, attention_mask=None, token_type_ids=None, inputs_embeds=None):
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, 
+                            inputs_embeds=inputs_embeds, output_hidden_states=True, return_dict=True)
 
         pooler_output = self._pooler(attention_mask, outputs)
         # If using "cls", we add an extra MLP layer
@@ -82,17 +78,15 @@ class Bert(BaseModel):
             pooler_output = self.mlp(pooler_output)
 
         logits = self.output(pooler_output)
-        logits = logits.view(-1, self.args.nlabels)
+        logits = logits.view(-1, self.nlabels)
 
         return logits
 
-    def predict(self, input_ids, attention_mask, token_type_ids, softmax_mask):
+    def predict(self, input_ids=None, attention_mask=None, token_type_ids=None):
         logits = self(input_ids=input_ids, 
                       attention_mask=attention_mask,
                       token_type_ids=token_type_ids, 
                       )
-
-        logits += (softmax_mask - 1) * 1e10
 
         predict = logits.argmax(dim=-1)
         predict = predict.cpu().tolist()
@@ -111,7 +105,7 @@ class Bert(BaseModel):
         head_paras = [
             {'params': [p for n, p in named_paras if 'bert' not in n], 'lr': self.hparams.lr}
         ]
-        print('head_paras:', head_paras)
+        #  print('head_paras:', head_paras)
 
         paras = bert_paras + head_paras
 

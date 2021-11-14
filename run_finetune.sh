@@ -19,15 +19,19 @@ do
     do
             python train.py \
             --gpus 1 \
+            --num_threads 2 \
             --max_epochs 100 \
             --lr ${lr} \
             --bert_lr ${bert_lr} \
-            --train_batchsize 1 \
+            --train_batchsize  \
             --valid_batchsize 1 \
             --num_workers 8 \
             --data_dir "data/" \
+            --train_data "imdb_train.json" \
+            --valid_data "imdb_test.json" \
+            --test_data "imdb_test.json" \
             --model_name 'BertModel' \
-            --pretrained_model $1 \
+            --pretrained_model_name $1 \
             --warmup 0.1 \
             --pooler_type 'cls' \
             --finetune \
@@ -35,13 +39,13 @@ do
             --gradient_clip_val 1 \
             --precision 32 \
             --val_check_interval 1.0 \
-            --adv \
             --mlp_dropout 0. 
     done
 done
+            --adv \
+            # --recreate_dataset \
             # --checkpoint_path 'epoch=02-valid_f1=0.6172.ckpt'
             # --eval
             # --track_grad_norm 2 \
             # --child_tuning \
-            # --recreate_dataset \
             # --plugins "fsdp" \

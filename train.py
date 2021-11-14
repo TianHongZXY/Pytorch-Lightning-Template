@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from torch.optim import Adam
 from transformers import AutoModel, AutoTokenizer, AdamW
 from dataloader import TaskDataset, TaskDataModel
-from models.base_model import BaseADModel
+from models.base_model import BaseModel
 from models.bert_baseline import Bert
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything, loggers
@@ -34,6 +34,7 @@ def main(args):
     # Set path to save checkpoint and outputs
     if args.checkpoint_path is not None:
         save_path = os.path.split(args.checkpoint_path)[0]
+        args.save_path = save_path
     else:
         hyparas = 'bs={}-lr={}-pooler={}-model={}-l2={}-ft={}-clip={}-drop={}-adv={}-prec-{}'.format(
                     args.train_batchsize, args.lr, args.pooler_type, args.pretrained_model_name, args.l2,
@@ -42,16 +43,17 @@ def main(args):
         save_path = os.path.join(save_path, hyparas)
         if not os.path.exists(save_path):
             os.makedirs(save_path)
+        args.save_path = save_path
 
         # Prepare Trainer
         checkpoint = ModelCheckpoint(dirpath=save_path,
                                      save_top_k=3,
                                      save_last=True,
-                                     monitor='valid_f1',
+                                     monitor='valid_acc',
                                      mode='max',
-                                     filename='{epoch:02d}-{valid_f1:.4f}')
+                                     filename='{epoch:02d}-{valid_acc:.4f}')
         checkpoint.CHECKPOINT_NAME_LAST = "{epoch}-last"
-        early_stop = EarlyStopping(monitor='valid_f1',
+        early_stop = EarlyStopping(monitor='valid_acc',
                                    mode='max',
                                    patience=5,
                                    check_on_train_epoch_end=True) # Check early stopping after every train epoch, ignore multi validation in one train epoch
@@ -63,7 +65,7 @@ def main(args):
         args.pretrained_model = os.path.join(args.pretrained_model_dir, args.pretrained_model_name)
 
         # Save args
-        with open(os.path.join(args.save_path, 'args.json'), 'w') as f:
+        with open(os.path.join(save_path, 'args.json'), 'w') as f:
             json.dump(vars(args), f, indent=4)
 
     print('-' * 30 + 'Args' + '-' * 30)
@@ -130,13 +132,16 @@ if __name__ == '__main__':
                             type=str, help="Path to the directory which contains all the pretrained models downloaded from huggingface")
 
     # * Args for data preprocessing
-    total_parser = Task2DataModel.add_data_specific_args(total_parser)
+    total_parser = TaskDataModel.add_data_specific_args(total_parser)
     # * Args for training
     total_parser = Trainer.add_argparse_args(total_parser)
-    # * Args for model specific
-    total_parser = BaseADModel.add_model_specific_args(total_parser)
+    # * Args for base model 
+    total_parser = BaseModel.add_model_specific_args(total_parser)
+    # * Args for base specific model 
+    total_parser = Bert.add_model_specific_args(total_parser)
 
     args = total_parser.parse_args()
+    torch.set_num_threads(args.num_threads)
     
     main(args)
 

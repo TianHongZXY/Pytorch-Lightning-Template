@@ -112,18 +112,23 @@ class TaskDataModel(pl.LightningDataModule):
             #  data = list(filter(lambda x: len(self.acronym2lf[x['acronym']]) < 15 and (x['acronym'] in self.ori_diction or random.random() < 0.2), data))
             output = f'Load {len(data)} instances from {cached_data_path}.'
         else:
-            print(f'Preprocess {data_path} for Task2...')
+            print(f'Preprocess {data_path} for TASK NAME...')
             dataset = json.load(open(data_path, 'r'))
             data = []
 
             for example in tqdm(dataset):
                 sentence = example['sentence']
-                encoded = self.tokenizer(sentence, padding=True, truncation=True, max_length=512, return_tensors='pt')
+                # Do not return_tensors here, otherwise rnn.pad_sequence in collate_fn will raise error
+                encoded = self.tokenizer(sentence, truncation=True, max_length=512)
+                encoded['sentence'] = sentence
+                encoded['input_ids'] = torch.LongTensor(encoded['input_ids'])
+                encoded['attention_mask'] = torch.LongTensor(encoded['attention_mask'])
+                encoded['token_type_ids'] = torch.LongTensor(encoded['token_type_ids'])
                 #  for ids in encoded["input_ids"]:
                 #      print(tokenizer.decode(ids))
 
                 if not test:
-                    label = example['label']
+                    label = int(example['label'])
                     encoded['label'] = label
 
                 #  Customize your example here if needed
@@ -139,12 +144,12 @@ class TaskDataModel(pl.LightningDataModule):
                 #      'token_type_ids': torch.LongTensor(encoded['token_type_ids']),
                 #  }
 
-                data.append(example)
+                data.append(encoded)
 
             output = f'Load {len(data)} instances from {data_path}.'
-            data = Task2Dataset(data)
+            data = TaskDataset(data)
             torch.save(data, cached_data_path)
-            #  print('ins:', ins)
+            print('Last example:', encoded)
 
         print(output)
         return data

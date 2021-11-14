@@ -19,7 +19,7 @@ class AdversarialLoss(object):
         # * divergence function
         self.divergence = getattr(self, args.divergence)
 
-    def __call__(self, model, logits, input_ids, attention_mask, token_type_ids):
+    def __call__(self, model, logits, train_inputs):
         # * get disturbed inputs
         inputs_embeds = model.bert.embeddings.word_embeddings(input_ids)
         noise = inputs_embeds.clone().detach().normal_(
