@@ -5,7 +5,7 @@
 #   Email         : zhuxy21@mails.tsinghua.edu.cn
 #   File Name     : optimization.py
 #   Last Modified : 2021-11-19 15:45
-#   Describe      : 
+#   Describe      : modified from https://github.com/MuQiuJun-AI/bert4pytorch/blob/master/bert4pytorch/optimization.py
 #
 # ====================================================
 
