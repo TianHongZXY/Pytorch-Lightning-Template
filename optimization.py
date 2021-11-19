@@ -1,3 +1,14 @@
+# ====================================================
+#   Copyright (C) 2021  All rights reserved.
+#
+#   Author        : Xinyu Zhu
+#   Email         : zhuxy21@mails.tsinghua.edu.cn
+#   File Name     : optimization.py
+#   Last Modified : 2021-11-19 15:45
+#   Describe      : 
+#
+# ====================================================
+
 import math
 from typing import Callable, Iterable, Optional, Tuple, Union
 
