@@ -10,15 +10,14 @@
 # ====================================================
 
 import math
-from typing import Callable, Iterable, Optional, Tuple, Union
-
 import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
+from torch.distributions.bernoulli import Bernoulli
+from typing import Callable, Iterable, Optional, Tuple, Union
 
 
 def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
-
     """
     线性warmup的schedule，前num_warmup_steps个step学习率从0线性增长到lr，然后一直衰减至训练结束时达到0
 
@@ -42,8 +41,9 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
 
 class AdamW(Optimizer):
     """
-    带权重衰减的Adam
+    带权重衰减的Adam，同时集成了Child Tuning功能
     <https://arxiv.org/abs/1711.05101>`__.
+    <https://github.com/alibaba/AliceMind/blob/c17b177e7e/ChildTuning/ChildTuningOptimizer.py>
 
     参数:
         params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
@@ -57,6 +57,8 @@ class AdamW(Optimizer):
             权重衰减参数
         correct_bias (:obj:`bool`, `optional`, defaults to `True`):
             修正Adam的bias (原始的tf版本的bert，没有修正bias，取值为False，但是可以尝试用True，可能会收敛更稳定)
+        reserve_p (:obj:`float`, `optional`, defaults to 1.0):
+            使用child tuning时对grad进行dropout的p值，0.9代表随机 drop 10% 的grad，默认不使用Child Tuning
     例子:
         param_optimizer = list(model.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -66,7 +68,7 @@ class AdamW(Optimizer):
             {'params': [p for n, p in param_optimizer
                         if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5, correct_bias=False)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5, correct_bias=False, reserve_p=0.9)
 
     """
 
@@ -78,6 +80,7 @@ class AdamW(Optimizer):
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
+        reserve_p: float = 1.0
     ):
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
@@ -88,6 +91,7 @@ class AdamW(Optimizer):
         if not 0.0 <= eps:
             raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=correct_bias)
+        self.reserve_p = reserve_p
         super().__init__(params, defaults)
 
     def step(self, closure: Callable = None):
@@ -110,7 +114,12 @@ class AdamW(Optimizer):
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
-
+                
+                # ChildTuning-Free
+                # =================== HACK BEGIN =======================         
+                grad_mask = Bernoulli(grad.new_full(size=grad.size(), fill_value=self.reserve_p))
+                grad *= grad_mask.sample() / self.reserve_p
+                # =================== HACK END =======================
                 state = self.state[p]
 
                 # state初始化

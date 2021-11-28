@@ -15,11 +15,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from transformers import AutoConfig, AutoModel, AdamW
+from transformers import AutoConfig, AutoModel
 from transformers.optimization import get_linear_schedule_with_warmup
 from models.base_model import BaseModel, MLPLayer, OutputLayer, Pooler
 from torchsnooper import snoop
-from ChildTuningOptimizer import ChildTuningAdamW
+from optimization import AdamW
 from fairscale.nn import checkpoint_wrapper, auto_wrap, wrap
 
 
@@ -32,7 +32,7 @@ class Bert(BaseModel):
         parser.add_argument('--pretrained_model_name',
                             default='bert-base-cased',
                             type=str)
-        parser.add_argument('--child_tuning', action='store_true', default=False, help="if use the child tuning optimizer")
+        parser.add_argument('--child_tuning_p', type=float, default=1.0, help="prob of dropout gradient, if < 1.0, use child-tuning")
         parser.add_argument('--finetune', action='store_true', default=False, help="if fine tune the pretrained model")
         parser.add_argument("--pooler_type", type=str, default="cls", help="acceptable values:[cls, cls_before_pooler, avg, avg_top2, avg_first_last]")
         parser.add_argument('--bert_lr', default=1e-5, type=float)
@@ -109,10 +109,7 @@ class Bert(BaseModel):
 
         paras = bert_paras + head_paras
 
-        if self.hparams.child_tuning:
-            optimizer = ChildTuningAdamW(paras, lr=self.hparams.lr)
-        else:
-            optimizer = AdamW(paras, lr=self.hparams.lr)
+        optimizer = AdamW(paras, lr=self.hparams.lr, reserve_p=self.hparams.child_tuning_p)
         scheduler = get_linear_schedule_with_warmup(optimizer, int(self.total_step * self.hparams.warmup), self.total_step)
 
         return [
