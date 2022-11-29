@@ -17,7 +17,7 @@ from transformers.optimization import AdamW, get_scheduler
 import pytorch_lightning as pl
 from pytorch_lightning.strategies import DeepSpeedStrategy
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
-from typing import List, Union, Tuple, Optional, Dict
+from typing import Dict
 
 
 class BaseModel(pl.LightningModule):
@@ -55,8 +55,9 @@ class BaseModel(pl.LightningModule):
             args = argparse.Namespace(**args)
         self.args = args
         self.save_hyperparameters(args)
-        # self._consumed_samples = 0
-        # self._consumed_tokens = 0
+        self._consumed_samples = 0
+        self._consumed_tokens = 0
+        self.ts_logger = self.logger.experiment
 
     def setup(self, stage):
         if stage == 'fit':
@@ -85,13 +86,25 @@ class BaseModel(pl.LightningModule):
         raise NotImplementedError()
 
     def training_step(self, batch, batch_idx) -> Dict:
-        """ training step """
+        """ a universal training step for all circumstances"""
         inputs = self.get_inputs(batch)
-        batch_size = inputs["input_ids"].size(0)
+        input_ids = inputs["input_ids"]
+        batch_size = input_ids.size(0)
+        world_size = self.trainer.world_size
+        self._consumed_samples += batch_size * max(world_size, 1)
+        labels = inputs["labels"]
+        if labels is not None:
+            self._consumed_tokens += len(labels.flatten()) * max(world_size, 1)
+        else:
+            self._consumed_tokens += len(input_ids.flatten()) * max(world_size, 1)
+
         loss, logits = self(**inputs)
 
         self.log("train_loss", loss, prog_bar=True, logger=True, on_step=True, batch_size=batch_size)
         wandb.log({"train_loss": loss})
+
+        self.ts_logger.add_scalar("train_loss_vs_samples", loss.item(), self._consumed_samples)
+        self.ts_logger.add_scalar("train_loss_vs_tokens", loss.item(), self._consumed_tokens)
 
         return {"loss": loss}
 
@@ -121,6 +134,8 @@ class BaseModel(pl.LightningModule):
         self.log("avg_val_loss", self.avg_val_loss, prog_bar=False, logger=True, on_epoch=True)
         wandb.log({"avg_val_loss": self.avg_val_loss})
 
+        self.ts_logger.add_scalar("val_loss_vs_samples", self.avg_val_loss, self._consumed_samples)
+
     def test_step(self, batch, batch_idx) -> Dict:
         """ test step """
         inputs = self.get_inputs(batch)
@@ -137,6 +152,8 @@ class BaseModel(pl.LightningModule):
             torch.mean(torch.stack([x["loss"] for x in test_step_outputs])).item(), 4)
         self.log("avg_test_loss", self.avg_test_loss, prog_bar=False, logger=True, on_epoch=True)
         wandb.log({"avg_test_loss": self.avg_test_loss})
+
+        self.ts_logger.add_scalar("test_loss_vs_samples", self.avg_test_loss, self._consumed_samples)
 
     def configure_optimizers(self) -> Dict:
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']

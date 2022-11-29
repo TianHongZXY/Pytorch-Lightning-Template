@@ -8,17 +8,14 @@
 #   Describe      : 
 #
 # ====================================================
-
 import os
+import logging
 from functools import partial
+from typing import List, Union, Tuple, Dict
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
-from transformers import PreTrainedTokenizer
-from typing import List, Union, Tuple, Optional, Dict, Callable
-import logging
 import coloredlogs
-import pickle
 logger = logging.getLogger('__file__')
 coloredlogs.install(level='INFO', logger=logger)
 
@@ -105,7 +102,6 @@ class BaseDataModel(pl.LightningDataModule):
         '''Puts each data field into a tensor with outer dimension batch size'''
         raise NotImplementedError()
 
-    # def load_raw_data_and_cache(self, path, type):
     def create_data_cache(self, path, type):
         '''Load raw data from cache if exists, otherwise load and then create cache'''
         cached_data_path = os.path.join(self.cached_data_root_path, f'{type}_cached.pkl')
