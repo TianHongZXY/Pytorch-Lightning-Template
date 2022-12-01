@@ -3,8 +3,8 @@
 #
 #   Author        : Xinyu Zhu
 #   Email         : zhuxy21@mails.tsinghua.edu.cn
-#   File Name     : gpt_modeling_base.py
-#   Last Modified : 2022-04-25 17:17
+#   File Name     : gpt_base_model.py
+#   Last Modified : 2022-11-30 17:36
 #   Describe      : 
 #
 # ====================================================
@@ -16,17 +16,14 @@ from base_model import BaseModel
 
 class GPTBaseModel(BaseModel):
     """
-    initiates a PyTorch Lightning GPT2 base model, defines basic training and evaluation steps, offer custom train/valid/test step function for specific tasks
+    Instantiate a GPT model based on PyTorch Lightning,
+    defines how to extract inputs from a batch and common language model training step.
     """
-    def __init__(self, args, model=None, tokenizer=None):
+    def __init__(self, args):
         super().__init__(args)
-        if model is None:
-            model = AutoModelForCausalLM.from_pretrained("gpt2")
-        if tokenizer is None:
-            tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-        self.model = model
-        self.tokenizer = tokenizer
+        self.model = AutoModelForCausalLM.from_pretrained(args.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
     def get_inputs(self, batch):
         inputs = {

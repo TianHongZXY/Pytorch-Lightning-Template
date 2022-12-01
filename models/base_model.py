@@ -22,7 +22,7 @@ from typing import Dict
 
 class BaseModel(pl.LightningModule):
     """
-    initiates a PyTorch Lightning base model, defines initialization procedure
+    Instantiate a base model based on PyTorch Lightning, defines initialization procedure, basic training/validation/test/predict steps.
     """
     @staticmethod
     def add_model_specific_args(parent_parser):
